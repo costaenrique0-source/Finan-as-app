@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controle de Despesas</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+  :root {
+    --inter-color: #FF7A00;
+    --nubank-color: #8A05BE;
+    --bg: #f4f5f7;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --text-muted: #6b7280;
+    --border: #e5e7eb;
+    --danger: #dc2626;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121316;
+      --card-bg: #1c1e22;
+      --text: #f0f0f0;
+      --text-muted: #9ca3af;
+      --border: #2c2f34;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121316;
+    --card-bg: #1c1e22;
+    --text: #f0f0f0;
+    --text-muted: #9ca3af;
+    --border: #2c2f34;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    min-height: 100%;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 18px;
+  }
+  header h1 {
+    font-size: 1.3rem;
+    margin: 0 0 2px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 5px;
+  }
+  .tab {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 10px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .tab .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .tab[data-bank="inter"] .dot { background: var(--inter-color); }
+  .tab[data-bank="nubank"] .dot { background: var(--nubank-color); }
+  .tab.active[data-bank="inter"] { background: color-mix(in srgb, var(--inter-color) 15%, transparent); color: var(--inter-color); }
+  .tab.active[data-bank="nubank"] { background: color-mix(in srgb, var(--nubank-color) 15%, transparent); color: var(--nubank-color); }
+  .tab.active[data-bank="all"] { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+
+  .summary-card {
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 16px;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .summary-card.inter { background: linear-gradient(135deg, #FF7A00, #E56600); }
+  .summary-card.nubank { background: linear-gradient(135deg, #9013C4, #6E0499); }
+  .summary-card.all { background: linear-gradient(135deg, #374151, #1f2937); }
+  .summary-card .label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+  }
+  .summary-card .amount {
+    font-size: 1.9rem;
+    font-weight: 700;
+    margin-top: 4px;
+    letter-spacing: -0.02em;
+  }
+  .summary-card .count {
+    font-size: 0.78rem;
+    opacity: 0.8;
+    margin-top: 4px;
+  }
+
+  form.add-form {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 18px;
+  }
+  .form-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .form-row:last-child { margin-bottom: 0; }
+  .field { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  input, select {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 10px;
+    font-size: 0.95rem;
+    width: 100%;
+    font-family: inherit;
+  }
+  input:focus, select:focus { outline: 2px solid var(--text-muted); outline-offset: -1px; }
+
+  button.submit-btn {
+    margin-top: 10px;
+    width: 100%;
+    border: none;
+    border-radius: 10px;
+    padding: 12px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #fff;
+    cursor: pointer;
+  }
+  button.submit-btn.inter { background: var(--inter-color); }
+  button.submit-btn.nubank { background: var(--nubank-color); }
+  button.submit-btn.all { background: #374151; }
+  button.submit-btn:active { opacity: 0.85; }
+  button.submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .list-section h2 {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin: 0 0 8px 4px;
+    font-weight: 600;
+  }
+  .expense-list { display: flex; flex-direction: column; gap: 8px; }
+  .expense-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .expense-item .bank-bar {
+    width: 4px;
+    align-self: stretch;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .expense-item.inter .bank-bar { background: var(--inter-color); }
+  .expense-item.nubank .bank-bar { background: var(--nubank-color); }
+  .expense-info { flex: 1; min-width: 0; }
+  .expense-desc {
+    font-weight: 600;
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .expense-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .bank-pill {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px 2px 2px;
+    border-radius: 20px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+  .expense-amount {
+    font-weight: 700;
+    font-size: 0.95rem;
+    white-space: nowrap;
+  }
+  .delete-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .delete-btn:active { color: var(--danger); }
+
+  .empty-state {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 30px 10px;
+    font-size: 0.88rem;
+  }
+  .status-banner {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+  }
+  .theme-toggle {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.45;
+  }
+  .theme-toggle:active { opacity: 0.9; }
+
+  .bank-logo {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.62rem;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+    letter-spacing: -0.02em;
+  }
+  .bank-logo.inter { background: var(--inter-color); }
+  .bank-logo.nubank { background: var(--nubank-color); }
+  .bank-logo.sm { width: 16px; height: 16px; font-size: 0.5rem; border-radius: 4px; }
+  .tab .bank-logo { margin-right: 2px; }
+  .bank-breakdown {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .breakdown-chip {
+    flex: 1;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .breakdown-chip .info { display: flex; flex-direction: column; min-width: 0; }
+  .breakdown-chip .name { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+  .breakdown-chip .val { font-size: 0.92rem; font-weight: 700; white-space: nowrap; }
+
+  /* Layout desktop: barra lateral fixa + painel principal com a lista */
+  .layout { display: block; }
+  .main-content { margin-top: 18px; }
+
+  @media (min-width: 860px) {
+    .app { max-width: 1100px; padding: 32px 32px calc(32px + env(safe-area-inset-bottom, 0px)); }
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+    .sidebar { position: sticky; top: 32px; }
+    header { text-align: left; }
+    header h1 { font-size: 1.5rem; }
+    .top-bar { justify-content: flex-end; }
+    .main-content { margin-top: 0; }
+    .list-section {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 22px;
+    }
+    .list-section h2 { font-size: 1rem; margin-left: 0; }
+    .expense-list { max-height: calc(100vh - 160px); overflow-y: auto; padding-right: 4px; }
+    .expense-item { padding: 14px 16px; }
+    .expense-item:hover { border-color: var(--text-muted); }
+    .tab:hover { color: var(--text); }
+    button.submit-btn:hover { opacity: 0.9; }
+    .theme-toggle:hover { opacity: 0.9; background: var(--bg); }
+    .delete-btn:hover { color: var(--danger); }
+  }
+
+  @media (min-width: 1180px) {
+    .app { max-width: 1280px; }
+    .layout { grid-template-columns: 360px 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="layout">
+    <div class="sidebar">
+      <div class="top-bar">
+        <button class="theme-toggle" id="themeToggle" title="Mudar tema" aria-label="Mudar tema">🌙</button>
+      </div>
+
+      <header>
+        <h1>Controle de Despesas</h1>
+        <p>Registre gastos do Inter e do Nubank</p>
+      </header>
+
+      <div id="statusBanner" class="status-banner" style="display:none;"></div>
+
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-bank="all"><span class="dot" style="background:#9ca3af"></span>Todos</button>
+        <button class="tab" data-bank="inter"><span class="bank-logo sm inter">i</span>Inter</button>
+        <button class="tab" data-bank="nubank"><span class="bank-logo sm nubank">nu</span>Nubank</button>
+      </div>
+
+      <div id="summaryCard" class="summary-card all">
+        <div class="label">Total gasto</div>
+        <div class="amount" id="summaryAmount">R$ 0,00</div>
+        <div class="count" id="summaryCount">0 lançamentos</div>
+      </div>
+
+      <div class="bank-breakdown" id="bankBreakdown">
+        <div class="breakdown-chip">
+          <span class="bank-logo inter">i</span>
+          <div class="info">
+            <span class="name">Inter</span>
+            <span class="val" id="interTotal">R$ 0,00</span>
+          </div>
+        </div>
+        <div class="breakdown-chip">
+          <span class="bank-logo nubank">nu</span>
+          <div class="info">
+            <span class="name">Nubank</span>
+            <span class="val" id="nubankTotal">R$ 0,00</span>
+          </div>
+        </div>
+      </div>
+
+      <form class="add-form" id="addForm">
+        <div class="form-row">
+          <div class="field" style="flex:2">
+            <label for="descInput">Descrição</label>
+            <input type="text" id="descInput" placeholder="Ex: Mercado, Uber..." required maxlength="80">
+          </div>
+          <div class="field">
+            <label for="valueInput">Valor (R$)</label>
+            <input type="number" id="valueInput" placeholder="0,00" step="0.01" min="0.01" required inputmode="decimal">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label for="dateInput">Data</label>
+            <input type="date" id="dateInput" required>
+          </div>
+        </div>
+        <button type="submit" class="submit-btn all" id="submitBtn">Adicionar despesa</button>
+      </form>
+    </div>
+
+    <div class="main-content">
+      <div class="list-section">
+        <h2 id="listTitle">Lançamentos</h2>
+        <div class="expense-list" id="expenseList"></div>
+        <div class="empty-state" id="emptyState" style="display:none;">Nenhuma despesa registrada ainda.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  let db = null;
+  let expenses = [];
+  let currentFilter = 'all';
+  let unsubscribe = null;
+
+  const themeToggle = document.getElementById('themeToggle');
+
+  function applyTheme(theme) {
+    if (theme === 'dark' || theme === 'light') {
+      document.documentElement.setAttribute('data-theme', theme);
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    themeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+  }
+
+  function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem('despesas-theme'); } catch (err) {}
+    if (saved) {
+      applyTheme(saved);
+    } else {
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(prefersDark ? 'dark' : 'light');
+    }
+  }
+
+  themeToggle.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem('despesas-theme', next); } catch (err) {}
+  });
+
+  initTheme();
+
+  const statusBanner = document.getElementById('statusBanner');
+  const tabs = document.getElementById('tabs');
+  const summaryCard = document.getElementById('summaryCard');
+  const summaryAmount = document.getElementById('summaryAmount');
+  const summaryCount = document.getElementById('summaryCount');
+  const addForm = document.getElementById('addForm');
+  const bankBreakdown = document.getElementById('bankBreakdown');
+  const descInput = document.getElementById('descInput');
+  const valueInput = document.getElementById('valueInput');
+  const dateInput = document.getElementById('dateInput');
+  const submitBtn = document.getElementById('submitBtn');
+  const expenseList = document.getElementById('expenseList');
+  const emptyState = document.getElementById('emptyState');
+  const listTitle = document.getElementById('listTitle');
+
+  const todayISO = () => {
+    const d = new Date();
+    const off = d.getTimezoneOffset();
+    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+  };
+  dateInput.value = todayISO();
+
+  const fmtMoney = (n) => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = (iso) => {
+    const [y, m, d] = iso.split('-');
+    return d + '/' + m + '/' + y;
+  };
+  const bankLabel = (b) => b === 'inter' ? 'Inter' : 'Nubank';
+
+  const LOCAL_KEY = 'despesas-registros';
+
+  function loadLocalExpenses() {
+    try {
+      const raw = localStorage.getItem(LOCAL_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function saveLocalExpenses() {
+    try {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(expenses));
+    } catch (err) {
+      // Armazenamento indisponível (ex: modo privado) — segue apenas em memória
+    }
+  }
+
+  function setStatus(msg, show) {
+    statusBanner.textContent = msg;
+    statusBanner.style.display = show ? 'block' : 'none';
+  }
+
+  function setActiveTab(bank) {
+    currentFilter = bank;
+    [...tabs.children].forEach(t => t.classList.toggle('active', t.dataset.bank === bank));
+    summaryCard.className = 'summary-card ' + bank;
+    submitBtn.className = 'submit-btn ' + bank;
+    if (bank === 'inter' || bank === 'nubank') {
+      submitBtn.textContent = 'Adicionar despesa — ' + bankLabel(bank);
+    }
+    addForm.style.display = bank === 'all' ? 'none' : 'block';
+    bankBreakdown.style.display = bank === 'all' ? 'flex' : 'none';
+    render();
+  }
+
+  tabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab');
+    if (!btn) return;
+    setActiveTab(btn.dataset.bank);
+  });
+
+  // Soma o valor total dos lançamentos de um banco específico
+  function getBankTotal(bank) {
+    return expenses
+      .filter(x => x.bank === bank)
+      .reduce((sum, x) => sum + x.amount, 0);
+  }
+
+  function render() {
+    const filtered = currentFilter === 'all' ? expenses : expenses.filter(x => x.bank === currentFilter);
+    const total = filtered.reduce((s, x) => s + x.amount, 0);
+    summaryAmount.textContent = fmtMoney(total);
+    summaryCount.textContent = filtered.length + (filtered.length === 1 ? ' lançamento' : ' lançamentos');
+    listTitle.textContent = currentFilter === 'all' ? 'Todos os lançamentos' : 'Lançamentos — ' + bankLabel(currentFilter);
+
+    document.getElementById('interTotal').textContent = fmtMoney(getBankTotal('inter'));
+    document.getElementById('nubankTotal').textContent = fmtMoney(getBankTotal('nubank'));
+
+    expenseList.innerHTML = '';
+    if (filtered.length === 0) {
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    const sorted = [...filtered].sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+    for (const exp of sorted) {
+      const item = document.createElement('div');
+      item.className = 'expense-item ' + exp.bank;
+      item.innerHTML = `
+        <div class="bank-bar"></div>
+        <div class="expense-info">
+          <div class="expense-desc">${escapeHtml(exp.description)}</div>
+          <div class="expense-meta">
+            <span class="bank-pill ${exp.bank}"><span class="bank-logo sm ${exp.bank}">${exp.bank === 'inter' ? 'i' : 'nu'}</span>${bankLabel(exp.bank)}</span>
+            <span>${fmtDate(exp.date)}</span>
+          </div>
+        </div>
+        <div class="expense-amount">${fmtMoney(exp.amount)}</div>
+        <button class="delete-btn" data-id="${exp.id}" title="Excluir">✕</button>
+      `;
+      expenseList.appendChild(item);
+    }
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  expenseList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.delete-btn');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (!db) {
+      expenses = expenses.filter(x => x.id !== id);
+      saveLocalExpenses();
+      render();
+      return;
+    }
+    try {
+      await db.collection('expenses').doc(id).delete();
+    } catch (err) {
+      setStatus('Não foi possível excluir agora. Tente novamente.', true);
+    }
+  });
+
+  addForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const description = descInput.value.trim();
+    const amount = parseFloat(valueInput.value);
+    const date = dateInput.value;
+    const bank = currentFilter === 'all' ? 'inter' : currentFilter;
+    if (!description || !amount || amount <= 0 || !date) return;
+
+    submitBtn.disabled = true;
+    const localExpense = {
+      id: 'local-' + Date.now(),
+      description, amount, date, bank,
+      createdAt: Date.now()
+    };
+
+    if (db) {
+      try {
+        await db.collection('expenses').add({
+          description, amount, date, bank, createdAt: Date.now()
+        });
+      } catch (err) {
+        setStatus('Não foi possível salvar agora. Tente novamente.', true);
+      }
+    } else {
+      expenses.push(localExpense);
+      saveLocalExpenses();
+      render();
+    }
+
+    descInput.value = '';
+    valueInput.value = '';
+    dateInput.value = todayISO();
+    submitBtn.disabled = false;
+    descInput.focus();
+  });
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyC6wHJiTc3SusAab5xh6RXrH_UmIhcSo9M",
+    authDomain: "financas-7c22b.firebaseapp.com",
+    projectId: "financas-7c22b",
+    storageBucket: "financas-7c22b.firebasestorage.app",
+    messagingSenderId: "228235448038",
+    appId: "1:228235448038:web:ff8e02051e95ba751e7527"
+  };
+
+  async function init() {
+    try {
+      if (typeof firebase === 'undefined') throw new Error('Firebase SDK não carregou');
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+    } catch (err) {
+      db = null;
+    }
+
+    if (db) {
+      try {
+        unsubscribe = db.collection('expenses').orderBy('date', 'desc').limit(500).onSnapshot(
+          (snap) => {
+            expenses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            render();
+          },
+          (err) => {
+            setStatus('Modo local: os dados ficam salvos apenas neste aparelho.', true);
+            db = null;
+            expenses = loadLocalExpenses();
+            render();
+          }
+        );
+      } catch (err) {
+        setStatus('Modo local: os dados ficam salvos apenas neste aparelho.', true);
+        db = null;
+        expenses = loadLocalExpenses();
+        render();
+      }
+    } else {
+      setStatus('Modo local: os dados ficam salvos apenas neste aparelho.', true);
+      expenses = loadLocalExpenses();
+      render();
+    }
+  }
+
+  setActiveTab('all');
+  init();
+})();
+</script>
+</body>
+</html>
