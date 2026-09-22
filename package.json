@@ -1,0 +1,18 @@
+{
+  "name": "controle-de-despesas",
+  "version": "1.0.0",
+  "description": "Controle de Despesas - Inter e Nubank",
+  "main": "main.js",
+  "author": "Lucas",
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.lucas.controledespesas",
+    "productName": "Controle de Despesas",
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
